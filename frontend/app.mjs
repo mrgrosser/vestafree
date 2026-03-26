@@ -1,6 +1,9 @@
 import { BOARD_ROWS, BOARD_COLS, linesToTiles } from "/shared/board.mjs";
 
-const apiBase = window.localStorage.getItem("apiBase") || "http://localhost:3000";
+const runtimeConfig = window.__VESTAFREE_CONFIG__ || {};
+const apiBase = window.localStorage.getItem("apiBase") || runtimeConfig.apiBaseUrl || "http://localhost:3000";
+const refreshIntervalMs = Number(runtimeConfig.refreshIntervalMs) || 10_000;
+
 const board = document.querySelector("#board");
 const form = document.querySelector("#message-form");
 const messageInput = document.querySelector("#message");
@@ -54,3 +57,9 @@ form.addEventListener("submit", async (event) => {
 fetchState().catch((error) => {
   statusEl.textContent = `Unable to load backend: ${error.message}`;
 });
+
+setInterval(() => {
+  fetchState().catch(() => {
+    // Keep polling silently after first error shown above.
+  });
+}, refreshIntervalMs);
