@@ -1,11 +1,12 @@
 import { makeBoardState } from "../shared/board.mjs";
 
 export class ProviderScheduler {
-  constructor({ providers, activeProviderId, onError = console.error }) {
+  constructor({ providers, activeProviderId, onError = console.error, onStateChange = null }) {
     this.providers = providers;
     this.providerById = new Map(providers.map((provider) => [provider.id, provider]));
     this.activeProviderId = activeProviderId;
     this.onError = onError;
+    this.onStateChange = onStateChange;
     this.lastGoodByProvider = new Map();
     this.intervals = [];
     this.state = makeBoardState("");
@@ -16,14 +17,32 @@ export class ProviderScheduler {
     };
   }
 
+  notifyStateChange() {
+    if (typeof this.onStateChange === "function") {
+      this.onStateChange(this.getState());
+    }
+  }
+
   ensureActiveProvider() {
+    if (!this.providers.length) {
+      this.activeProviderId = null;
+      this.meta.activeProviderId = null;
+      return;
+    }
+
     if (this.providerById.has(this.activeProviderId)) return;
     const [firstProvider] = this.providers;
-    if (!firstProvider) {
-      throw new Error("No providers configured");
-    }
     this.activeProviderId = firstProvider.id;
     this.meta.activeProviderId = firstProvider.id;
+  }
+
+  hydrate({ state, meta, lastGoodByProvider }) {
+    if (state) this.state = state;
+    if (meta) this.meta = { ...this.meta, ...meta };
+    if (lastGoodByProvider && typeof lastGoodByProvider === "object") {
+      this.lastGoodByProvider = new Map(Object.entries(lastGoodByProvider));
+    }
+    this.ensureActiveProvider();
   }
 
   getState() {
@@ -50,6 +69,7 @@ export class ProviderScheduler {
         this.state = boardState;
         this.meta.lastUpdatedAt = new Date().toISOString();
         this.meta.lastError = null;
+        this.notifyStateChange();
       }
     } catch (error) {
       const details = {
@@ -66,18 +86,25 @@ export class ProviderScheduler {
           this.state = fallback;
         }
         this.meta.lastError = details;
+        this.notifyStateChange();
       }
     }
   }
 
   async refreshActiveProvider() {
     this.ensureActiveProvider();
+    if (!this.activeProviderId) return;
     const provider = this.providerById.get(this.activeProviderId);
     await this.refreshProvider(provider);
   }
 
   async start() {
     this.ensureActiveProvider();
+
+    if (!this.providers.length) {
+      this.notifyStateChange();
+      return;
+    }
 
     await Promise.all(this.providers.map((provider) => this.refreshProvider(provider)));
 
@@ -112,5 +139,6 @@ export class ProviderScheduler {
       this.meta.lastUpdatedAt = new Date().toISOString();
       this.meta.lastError = null;
     }
+    this.notifyStateChange();
   }
 }
