@@ -1,0 +1,9 @@
+{
+  "name": "vestafree",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:backend": "node backend/main.mjs",
+    "dev:frontend": "node frontend/server.mjs"
+  }
+}

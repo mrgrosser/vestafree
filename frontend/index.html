@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vestafree</title>
+    <link rel="stylesheet" href="/frontend/styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <h1>Vestafree Board</h1>
+      <form id="message-form" class="controls">
+        <label for="message">Message</label>
+        <textarea id="message" name="message" rows="3" maxlength="300" placeholder="Type a message"></textarea>
+        <button type="submit">Send to board</button>
+        <small id="status"></small>
+      </form>
+      <section>
+        <div id="board" class="board" aria-label="Vestaboard-style grid"></div>
+      </section>
+    </main>
+    <script type="module" src="/frontend/app.mjs"></script>
+  </body>
+</html>
