@@ -1,9 +1,9 @@
 import http from "node:http";
-import { makeBoardState, BOARD_ROWS, BOARD_COLS } from "../shared/board.mjs";
+import { BOARD_ROWS, BOARD_COLS } from "../shared/board.mjs";
+import { createProvidersFromEnv } from "./providers/index.mjs";
+import { ProviderScheduler } from "./providerScheduler.mjs";
 
-const PORT = process.env.PORT || 3000;
-
-let state = makeBoardState("HELLO VESTAFREE");
+const PORT = Number(process.env.PORT || 3000);
 
 function json(res, status, body) {
   res.writeHead(status, {
@@ -35,6 +35,17 @@ function readJson(req) {
   });
 }
 
+const { providers, defaultProviderId } = createProvidersFromEnv();
+const scheduler = new ProviderScheduler({
+  providers,
+  activeProviderId: defaultProviderId,
+  onError: (message) => console.error(message)
+});
+
+const manualProvider = providers.find((provider) => provider.id === "manual");
+
+await scheduler.start();
+
 const server = http.createServer(async (req, res) => {
   const { method, url } = req;
 
@@ -47,20 +58,45 @@ const server = http.createServer(async (req, res) => {
       ok: true,
       rows: BOARD_ROWS,
       cols: BOARD_COLS,
-      time: new Date().toISOString()
+      time: new Date().toISOString(),
+      providers: providers.map((provider) => ({
+        id: provider.id,
+        pollIntervalMs: provider.pollIntervalMs
+      })),
+      activeProviderId: scheduler.activeProviderId
     });
   }
 
   if (method === "GET" && url === "/api/state") {
-    return json(res, 200, state);
+    return json(res, 200, scheduler.getState());
   }
 
   if (method === "POST" && url === "/api/message") {
+    if (!manualProvider) {
+      return json(res, 400, { error: "Manual provider is not enabled" });
+    }
+
     try {
       const payload = await readJson(req);
       const message = payload?.message ?? "";
-      state = makeBoardState(message);
-      return json(res, 200, state);
+      manualProvider.setMessage(message);
+
+      if (scheduler.activeProviderId === "manual") {
+        await scheduler.refreshActiveProvider();
+      }
+
+      return json(res, 200, scheduler.getState());
+    } catch (error) {
+      return json(res, 400, { error: error.message });
+    }
+  }
+
+  if (method === "POST" && url === "/api/provider") {
+    try {
+      const payload = await readJson(req);
+      scheduler.setActiveProvider(payload?.providerId);
+      await scheduler.refreshActiveProvider();
+      return json(res, 200, scheduler.getState());
     } catch (error) {
       return json(res, 400, { error: error.message });
     }
@@ -71,4 +107,14 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`Backend listening on http://localhost:${PORT}`);
+});
+
+process.on("SIGINT", () => {
+  scheduler.stop();
+  server.close(() => process.exit(0));
+});
+
+process.on("SIGTERM", () => {
+  scheduler.stop();
+  server.close(() => process.exit(0));
 });
